@@ -27,7 +27,7 @@ def sidebar() -> None:
     svc = service()
     with st.sidebar:
         st.header("New run")
-        st.caption(f"LLM: {svc.settings.llm_provider} · model: {svc.settings.resolved_model() or 'policies only'}")
+        st.caption(f"LLM: {svc.settings.effective_provider()} · model: {svc.settings.resolved_model() or 'policies only'}")
         up = st.file_uploader("Dataset", type=[e.lstrip(".") for e in svc.settings.allowed_extensions])
         target = st.text_input("Target column")
         pt = st.selectbox("Problem type", ["auto", "classification", "regression"])

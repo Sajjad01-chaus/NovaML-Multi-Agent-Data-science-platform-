@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any, Generic
 
 from novaml.config import Settings
-from novaml.llm.base import LLMError, LLMProvider, T
+from novaml.llm.base import LLMError, LLMProvider, T, Usage
 from novaml.log import get_logger
 
 log = get_logger(__name__)
@@ -96,16 +96,10 @@ class LLMGateway:
             value, usage = self.provider.structured(schema, f"{system}\n\n{DATA_GUARD}", user)
         except LLMError as e:
             record["latency_ms"] = round((time.perf_counter() - t0) * 1000, 1)
+            self._account(record, e.usage)
             return fallback(str(e)[:300])
         record["latency_ms"] = round((time.perf_counter() - t0) * 1000, 1)
-        record.update(
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cost_usd=round(
-                usage.input_tokens * self.in_price / 1e6 + usage.output_tokens * self.out_price / 1e6, 6
-            ),
-        )
-        self.tokens_spent += usage.total
+        self._account(record, usage)
 
         if validate is not None:
             try:
@@ -115,6 +109,16 @@ class LLMGateway:
         record["source"] = "llm"
         log.info("llm_call", **{k: v for k, v in record.items() if k != "error"})
         return Decision(value, "llm", record)
+
+
+    def _account(self, record: dict[str, Any], usage: Usage) -> None:
+        record.update(
+            model=usage.model or record["model"],
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cost_usd=round(usage.input_tokens * self.in_price / 1e6 + usage.output_tokens * self.out_price / 1e6, 6),
+        )
+        self.tokens_spent += usage.total
 
 
 def tokens_spent(llm_calls: list[dict[str, Any]] | None) -> int:

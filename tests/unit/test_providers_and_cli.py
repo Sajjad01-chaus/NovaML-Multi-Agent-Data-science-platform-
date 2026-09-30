@@ -78,6 +78,7 @@ def test_build_provider_none():
 
 def test_cli_run_and_status(tmp_path, iris_csv, monkeypatch, capsys):
     monkeypatch.setenv("NOVAML_DATA_DIR", str(tmp_path / "var"))
+    monkeypatch.setenv("NOVAML_LLM_PROVIDER", "none")  # never hit a real API from tests
     monkeypatch.setenv("NOVAML_CV_FOLDS", "3")
     monkeypatch.setenv("NOVAML_MAX_IMPROVEMENT_ROUNDS", "0")
     assert main(["run", str(iris_csv), "--target", "species", "--auto-approve"]) == 0

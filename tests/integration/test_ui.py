@@ -16,6 +16,7 @@ APP = str(Path(__file__).parents[2] / "ui" / "streamlit_app.py")
 @pytest.fixture
 def ui_env(tmp_path, monkeypatch):
     monkeypatch.setenv("NOVAML_DATA_DIR", str(tmp_path / "var"))
+    monkeypatch.setenv("NOVAML_LLM_PROVIDER", "none")  # never hit a real API from tests
     monkeypatch.setenv("NOVAML_CV_FOLDS", "3")
     monkeypatch.setenv("NOVAML_MAX_IMPROVEMENT_ROUNDS", "0")
     get_settings.cache_clear()

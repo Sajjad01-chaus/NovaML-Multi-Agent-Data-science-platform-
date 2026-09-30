@@ -48,9 +48,12 @@ class Settings(BaseSettings):
     """Max code-execution steps the analyst agent may take."""
 
     # --- LLM -----------------------------------------------------------------
-    llm_provider: Literal["anthropic", "groq", "none"] = "none"
-    """`none` runs every agent on its deterministic policy (no API key needed)."""
+    llm_provider: Literal["auto", "groq", "anthropic", "none"] = "auto"
+    """`auto` uses Groq when GROQ_API_KEY is set, otherwise deterministic policies
+    (`none`: no API key needed)."""
     llm_model: str | None = None
+    llm_fallback_models: list[str] | None = None
+    """Tried in order when the primary model is rate limited or unavailable."""
     llm_timeout_s: float = 60.0
     llm_max_retries: int = 2
     llm_max_output_tokens: int = 4096
@@ -58,8 +61,9 @@ class Settings(BaseSettings):
     """Anthropic effort level; agent decisions here are small, so low keeps cost down."""
     llm_server_fallbacks: bool = True
     """Anthropic server-side refusal fallback (routes a declined request to another model)."""
-    run_token_budget: int = 200_000
-    """Total LLM tokens a single run may spend before agents degrade to policies."""
+    run_token_budget: int = 60_000
+    """Total LLM tokens a single run may spend before agents degrade to policies.
+    Sized for Groq's free tier (~200K tokens/day per model): a few runs a day."""
     input_cost_per_mtok: float | None = None
     output_cost_per_mtok: float | None = None
 
@@ -68,7 +72,7 @@ class Settings(BaseSettings):
 
     # --- Sandbox -------------------------------------------------------------
     sandbox_timeout_s: float = 30.0
-    sandbox_max_output_chars: int = 4000
+    sandbox_max_output_chars: int = 2000
     sandbox_memory_mb: int = 1024
 
     @property
@@ -79,13 +83,26 @@ class Settings(BaseSettings):
     def checkpoint_path(self) -> Path:
         return self.data_dir / "checkpoints.sqlite"
 
+    def effective_provider(self) -> str:
+        if self.llm_provider != "auto":
+            return self.llm_provider
+        return "groq" if self.groq_api_key else "none"
+
     def resolved_model(self) -> str | None:
         if self.llm_model:
             return self.llm_model
         return {
+            "groq": "openai/gpt-oss-120b",
             "anthropic": "claude-opus-5-5",
-            "groq": "llama-3.3-70b-versatile",
-        }.get(self.llm_provider)
+        }.get(self.effective_provider())
+
+    def resolved_fallback_models(self) -> list[str]:
+        if self.llm_fallback_models is not None:
+            return [m for m in self.llm_fallback_models if m != self.resolved_model()]
+        if self.effective_provider() == "groq":
+            # Separate free-tier quotas per model; order = quality, then speed.
+            return [m for m in ("llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant") if m != self.resolved_model()]
+        return []
 
     def resolved_prices(self) -> tuple[float, float]:
         """USD per million (input, output) tokens, used for cost accounting."""

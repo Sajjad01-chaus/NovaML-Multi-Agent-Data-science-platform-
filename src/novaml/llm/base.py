@@ -14,6 +14,7 @@ T = TypeVar("T", bound=BaseModel)
 class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
+    model: str | None = None  # model that actually answered (may be a fallback)
 
     @property
     def total(self) -> int:
@@ -22,6 +23,10 @@ class Usage:
 
 class LLMError(RuntimeError):
     """Provider call failed, was refused, or returned unparseable output."""
+
+    def __init__(self, message: str, usage: Usage | None = None):
+        super().__init__(message)
+        self.usage = usage or Usage()  # tokens burned by failed attempts still count
 
 
 class LLMProvider(Protocol):

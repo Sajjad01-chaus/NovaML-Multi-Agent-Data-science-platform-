@@ -28,6 +28,15 @@ validation. Otherwise it returns the deterministic policy's answer and records w
 *Why:* graceful degradation (outages, refusals, budget exhaustion), fully offline CI and
 evals, and an easy A/B baseline: "LLM vs. policy" on the same benchmark.
 
+### D2b. Free-tier friendly by design
+The default provider is Groq's free tier: it is used automatically when `GROQ_API_KEY` is set.
+Free-tier quotas are per model (roughly 30 req/min, 8K tokens/min and 200K tokens/day
+for `openai/gpt-oss-120b`), so `GroqProvider` walks a fallback chain of models on 429s,
+retired models, unsupported features, 5xx errors or unparseable output. Only an auth error
+stops the chain. Tokens burned by failed attempts still count against the run budget.
+Structured output uses tool calling, which every Groq chat model supports; Groq's strict
+JSON-schema mode is limited to a few models and forbids optional fields.
+
 ### D3. LLM output is data, never code, in the serving path
 Feature engineering is a declarative `FeaturePlan` executed by a fixed sklearn
 transformer inside the pipeline. The generated FastAPI app is replaced by one fixed app
@@ -66,7 +75,7 @@ injected instruction can at worst produce a rejected answer.
 
 | Budget | Setting | Default |
 |---|---|---|
-| LLM tokens per run | `NOVAML_RUN_TOKEN_BUDGET` | 200k |
+| LLM tokens per run | `NOVAML_RUN_TOKEN_BUDGET` | 60k (sized for Groq free tier) |
 | Critic improvement rounds | `NOVAML_MAX_IMPROVEMENT_ROUNDS` | 2 |
 | Supervisor steps | `NOVAML_MAX_GRAPH_STEPS` | 40 |
 | Analyst code steps | `NOVAML_ANALYST_MAX_STEPS` | 4 |

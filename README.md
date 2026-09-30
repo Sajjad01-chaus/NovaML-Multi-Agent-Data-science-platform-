@@ -9,7 +9,7 @@ exports a servable model with a model card.
 ## Quick start
 
 ```bash
-pip install -e ".[dev,serve,ui,anthropic]"
+pip install -e ".[dev,serve,ui,groq]"
 novaml run path/to/data.csv --target churn --auto-approve
 novaml run path/to/data.csv --target churn            # pauses for human approval
 novaml resume <run_id> --approve linear random_forest
@@ -17,10 +17,12 @@ novaml serve var/runs/<run_id>/bundle                 # POST /predict
 streamlit run ui/streamlit_app.py
 ```
 
-No API key is needed. With `NOVAML_LLM_PROVIDER=none` (the default) every agent decision
-is made by a deterministic policy. Set `NOVAML_LLM_PROVIDER=anthropic` (or `groq`) plus
-the matching API key and an LLM makes those decisions instead, within a per-run token
-budget. See `.env.example`.
+**LLM: free Groq key.** Set `GROQ_API_KEY` (free at console.groq.com) and the agents'
+decisions are made by `openai/gpt-oss-120b`, falling back to `llama-3.3-70b-versatile`,
+`openai/gpt-oss-20b` and `llama-3.1-8b-instant` when a model hits its free-tier rate limit
+(each model has its own quota). Without a key, every decision is made by a deterministic
+policy, so the platform runs fully offline. Each run is capped at 60K tokens by default.
+See `.env.example`.
 
 ## Architecture
 
@@ -48,8 +50,8 @@ Details and design decisions: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Development
 
 ```bash
-pytest               # 68 tests: unit + end-to-end + headless UI, no network, no keys
-pytest -m live       # optional: real Anthropic call (needs ANTHROPIC_API_KEY)
+pytest               # 76 tests: unit + end-to-end + headless UI, no network, no keys
+pytest -m live       # optional: real Groq call (needs GROQ_API_KEY)
 ruff check src tests
 ```
 

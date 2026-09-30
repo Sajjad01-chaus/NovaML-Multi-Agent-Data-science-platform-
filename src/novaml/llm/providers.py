@@ -58,42 +58,77 @@ class AnthropicProvider:
 
 
 class GroqProvider:
-    """Open-weight models on Groq (free tier), via LangChain's structured output."""
+    """Open-weight models on Groq's free tier, via LangChain structured output.
+
+    Free-tier limits are per model (e.g. 30 RPM / 8K TPM / 200K TPD), so the
+    provider walks a fallback chain: when a model is rate limited, unavailable
+    or returns unparseable output, the next model is tried. Tool-calling based
+    structured output is used because it works across all Groq chat models
+    (strict JSON-schema mode is limited to a few models and forbids optional fields).
+    """
 
     name = "groq"
 
-    def __init__(self, settings: Settings):
-        from langchain_groq import ChatGroq
+    def __init__(self, settings: Settings, chat_factory: Any | None = None):
+        import groq
 
+        self._groq = groq
+        self.models = [settings.resolved_model() or "openai/gpt-oss-120b", *settings.resolved_fallback_models()]
+        self.model = self.models[0]
         key = settings.groq_api_key.get_secret_value() if settings.groq_api_key else None
-        self.model = settings.resolved_model() or "llama-3.3-70b-versatile"
-        self.chat = ChatGroq(
-            model=self.model,
-            temperature=0,
-            api_key=key,
-            timeout=settings.llm_timeout_s,
-            max_retries=settings.llm_max_retries,
-            max_tokens=settings.llm_max_output_tokens,
-        )
+
+        def default_factory(model: str):
+            from langchain_groq import ChatGroq
+
+            return ChatGroq(
+                model=model,
+                temperature=0,
+                api_key=key,
+                timeout=settings.llm_timeout_s,
+                max_retries=settings.llm_max_retries,
+                max_tokens=settings.llm_max_output_tokens,
+            )
+
+        self._factory = chat_factory or default_factory
+        self._chats: dict[str, Any] = {}
+
+    def _chat(self, model: str) -> Any:
+        if model not in self._chats:
+            self._chats[model] = self._factory(model)
+        return self._chats[model]
 
     def structured(self, schema: type[T], system: str, user: str) -> tuple[T, Usage]:
-        try:
-            out = self.chat.with_structured_output(schema, include_raw=True).invoke(
-                [("system", system), ("human", user)]
-            )
-        except Exception as e:  # langchain wraps provider errors inconsistently
-            raise LLMError(f"groq: {type(e).__name__}: {e}") from e
-        meta = getattr(out.get("raw"), "usage_metadata", None) or {}
-        usage = Usage(meta.get("input_tokens", 0), meta.get("output_tokens", 0))
-        if out.get("parsing_error") or out.get("parsed") is None:
-            raise LLMError(f"groq: unparseable output: {out.get('parsing_error')}")
-        return out["parsed"], usage
+        g = self._groq
+        spent = Usage()
+        failures: list[str] = []
+        for model in self.models:
+            try:
+                out = self._chat(model).with_structured_output(schema, include_raw=True).invoke(
+                    [("system", system), ("human", user)]
+                )
+            except (g.AuthenticationError, g.PermissionDeniedError) as e:
+                raise LLMError(f"groq: {type(e).__name__}: check GROQ_API_KEY", usage=spent) from e
+            except Exception as e:
+                # Rate limits (429), a retired model (404), an unsupported feature (400)
+                # and 5xx/timeouts are all model-specific; each model has its own quota.
+                failures.append(f"{model}: {type(e).__name__}")
+                continue
+            meta = getattr(out.get("raw"), "usage_metadata", None) or {}
+            spent.input_tokens += meta.get("input_tokens", 0)
+            spent.output_tokens += meta.get("output_tokens", 0)
+            if out.get("parsing_error") or out.get("parsed") is None:
+                failures.append(f"{model}: unparseable output")
+                continue
+            spent.model = model
+            return out["parsed"], spent
+        raise LLMError("groq: all models failed (" + "; ".join(failures) + ")", usage=spent)
 
 
 def build_provider(settings: Settings) -> LLMProvider | None:
     """Returns None when running in deterministic (no-LLM) mode."""
-    if settings.llm_provider == "anthropic":
-        return AnthropicProvider(settings)
-    if settings.llm_provider == "groq":
+    provider = settings.effective_provider()
+    if provider == "groq":
         return GroqProvider(settings)
+    if provider == "anthropic":
+        return AnthropicProvider(settings)
     return None
