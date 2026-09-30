@@ -22,6 +22,7 @@ from novaml.graph import build_graph
 from novaml.llm.base import LLMProvider
 from novaml.llm.providers import build_provider
 from novaml.log import configure_logging, get_logger
+from novaml.sandbox.executor import Sandbox
 
 log = get_logger(__name__)
 
@@ -44,13 +45,18 @@ class RunResult:
 
 
 class NovaML:
-    def __init__(self, settings: Settings | None = None, provider: LLMProvider | None | str = "auto"):
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        provider: LLMProvider | None | str = "auto",
+        sandbox: Sandbox | None = None,
+    ):
         self.settings = settings or get_settings()
         configure_logging()
         self.settings.data_dir.mkdir(parents=True, exist_ok=True)
         if provider == "auto":
             provider = build_provider(self.settings)
-        self.ctx = AgentContext(self.settings, provider)  # type: ignore[arg-type]
+        self.ctx = AgentContext(self.settings, provider, sandbox)  # type: ignore[arg-type]
         self._conn = sqlite3.connect(self.settings.checkpoint_path, check_same_thread=False)
         self.checkpointer = SqliteSaver(self._conn)
         self.graph = build_graph(self.ctx, self.checkpointer)
@@ -108,5 +114,6 @@ class NovaML:
     def _config(self, run_id: str) -> dict[str, Any]:
         return {
             "configurable": {"thread_id": run_id},
-            "recursion_limit": self.settings.max_graph_steps,
+            # Each agent step is followed by a supervisor hop.
+            "recursion_limit": 2 * self.settings.max_graph_steps + 5,
         }

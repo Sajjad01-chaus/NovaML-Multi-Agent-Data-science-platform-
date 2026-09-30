@@ -40,7 +40,9 @@ def test_messy_data_end_to_end(svc, messy_csv):
     assert any("missing target" in m for m in s["messages"])
     assert "customer_id" in s["feature_plan"]["drop_columns"]
     card = s["model_card"]
-    assert card["llm"]["calls"] == 1 and card["llm"]["policy_fallbacks"] == 1
+    # No provider configured: every decision point ran its policy.
+    assert card["llm"]["calls"] >= 4 and card["llm"]["llm_decisions"] == 0
+    assert card["llm"]["policy_fallbacks"] == card["llm"]["calls"]
 
 
 def test_bad_target_fails_cleanly(svc, iris_csv):

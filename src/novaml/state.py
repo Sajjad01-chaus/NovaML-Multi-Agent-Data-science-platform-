@@ -26,20 +26,33 @@ class RunState(TypedDict, total=False):
     metric: str
     profile: dict[str, Any]
     data_refs: dict[str, str]  # {"train": key, "test": key}
+    plan: dict[str, Any]  # RunPlan from the planner
+    analysis: dict[str, Any] | None  # analyst findings
 
     # Features
-    feature_plan: dict[str, Any]
+    feature_plan: dict[str, Any] | None
     feature_warnings: list[str]
+    feature_feedback: str  # critic's request when sending the run back
+    feature_revisions: int
 
     # Model selection + human review
     candidate_models: list[str]
     selection_reasoning: str
     approved_models: list[str]
 
-    # Training / evaluation
+    # Training / evaluation / reflection
+    train_mode: str  # fit | tune
+    tune_models: list[str]
     leaderboard: Annotated[list[dict[str, Any]], operator.add]
     best: dict[str, Any]
     holdout: dict[str, Any]
+    critiques: list[dict[str, Any]]
+    accepted: bool
+
+    # Supervisor work flags (set by the agent that creates the work)
+    needs_training: bool
+    needs_evaluation: bool
+    needs_critique: bool
 
     # Deployment
     bundle_dir: str

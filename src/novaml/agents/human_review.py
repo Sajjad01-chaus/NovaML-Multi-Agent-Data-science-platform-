@@ -16,7 +16,7 @@ class HumanReviewAgent(Agent):
     def run(self, state: RunState, ctx: AgentContext) -> dict[str, Any]:
         candidates = state["candidate_models"]
         if ctx.settings.auto_approve:
-            return {"approved_models": candidates, "messages": [self.say("auto-approved")]}
+            return {"approved_models": candidates, "needs_training": True, "messages": [self.say("auto-approved")]}
 
         # Pauses the graph; the checkpoint is persisted and the run can be resumed
         # later, from any worker, with Command(resume={"approved_models": [...]}).
@@ -32,6 +32,7 @@ class HumanReviewAgent(Agent):
             raise ValueError("no valid models approved")
         return {
             "approved_models": approved,
+            "needs_training": True,
             "status": "running",
             "messages": [self.say(f"human approved: {', '.join(approved)}")],
         }

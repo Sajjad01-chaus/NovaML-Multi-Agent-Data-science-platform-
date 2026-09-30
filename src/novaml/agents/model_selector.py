@@ -74,7 +74,8 @@ class ModelSelectorAgent(Agent):
         }
 
     def exclusions(self, state: RunState) -> list[str]:
-        return []
+        """Model families already trained in earlier rounds (critic asked for new ones)."""
+        return sorted({e["model"] for e in state.get("leaderboard", [])} & set(REGISTRY))
 
 
 def compact_profile(profile: dict[str, Any], max_cols: int = 60) -> dict[str, Any]:

@@ -78,7 +78,7 @@ def results(r: RunResult) -> None:
     for w in card.get("warnings", []):
         st.warning(w)
 
-    tabs = st.tabs(["Leaderboard", "Data", "Features", "Decisions", "Timeline", "Model card"])
+    tabs = st.tabs(["Leaderboard", "Reasoning", "Data", "Features", "LLM calls", "Timeline", "Model card"])
     with tabs[0]:
         lb = pd.DataFrame(s.get("leaderboard", []))
         if not lb.empty and "cv_score" in lb:
@@ -87,19 +87,32 @@ def results(r: RunResult) -> None:
             st.dataframe(lb[cols], use_container_width=True)
         st.json(s.get("holdout", {}))
     with tabs[1]:
+        plan = s.get("plan", {})
+        st.subheader("Plan")
+        st.write(plan.get("rationale", ""))
+        for r in plan.get("risks", []):
+            st.warning(r)
+        analysis = s.get("analysis") or {}
+        st.subheader(f"Analysis ({analysis.get('source', 'n/a')}, {analysis.get('code_steps', 0)} code steps)")
+        for x in analysis.get("insights", []):
+            st.markdown(f"- {x}")
+        st.subheader("Critic rounds")
+        crit = [{k: c.get(k) for k in ("round", "decision", "reasoning")} for c in s.get("critiques", [])]
+        st.dataframe(pd.DataFrame(crit), use_container_width=True)
+    with tabs[2]:
         prof = s["profile"]
         st.write(f"{prof['n_rows']} training rows · {prof['n_features']} features · {prof['total_missing']} missing cells")
         st.dataframe(pd.DataFrame(prof["columns"]).T, use_container_width=True)
-    with tabs[2]:
+    with tabs[3]:
         st.json(s.get("feature_plan", {}))
         for w in s.get("feature_warnings", []):
             st.caption(w)
-    with tabs[3]:
-        st.dataframe(pd.DataFrame(s.get("llm_calls", [])), use_container_width=True)
     with tabs[4]:
+        st.dataframe(pd.DataFrame(s.get("llm_calls", [])), use_container_width=True)
+    with tabs[5]:
         st.dataframe(pd.DataFrame(s.get("events", [])), use_container_width=True)
         st.code("\n".join(s.get("messages", [])))
-    with tabs[5]:
+    with tabs[6]:
         st.json(card)
         st.caption(f"Serve it: novaml serve {s.get('bundle_dir')}")
 

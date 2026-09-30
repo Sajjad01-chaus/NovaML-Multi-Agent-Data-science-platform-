@@ -46,5 +46,7 @@ class EvaluatorAgent(Agent):
         return {
             "best": {k: best[k] for k in ("model", "round", "artifact", "cv_score", "cv_std", "params") if k in best},
             "holdout": holdout,
+            "needs_evaluation": False,
+            "needs_critique": True,
             "messages": [self.say(msg)],
         }

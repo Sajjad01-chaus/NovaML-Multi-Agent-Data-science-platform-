@@ -16,6 +16,7 @@ from novaml.config import Settings
 from novaml.llm.base import LLMProvider
 from novaml.llm.gateway import LLMGateway, tokens_spent
 from novaml.log import get_logger
+from novaml.sandbox.executor import Sandbox
 from novaml.state import RunState
 from novaml.tools.data import DataValidationError
 
@@ -26,6 +27,7 @@ log = get_logger(__name__)
 class AgentContext:
     settings: Settings
     provider: LLMProvider | None = None
+    sandbox: Sandbox | None = None  # None -> SubprocessSandbox from settings
 
     def store(self, state: RunState) -> ArtifactStore:
         return ArtifactStore(self.settings.runs_dir, state["run_id"])
