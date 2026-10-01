@@ -1,4 +1,3 @@
-import os
 from types import SimpleNamespace
 
 import groq
@@ -63,6 +62,8 @@ def test_defaults_target_free_tier():
 def test_auto_provider_uses_groq_only_when_key_present(monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     assert Settings(_env_file=None).effective_provider() == "none"
+    monkeypatch.setenv("GROQ_API_KEY", "  ")  # blank line in .env
+    assert Settings(_env_file=None).effective_provider() == "none"
     assert build_provider(Settings(_env_file=None)) is None
     monkeypatch.setenv("GROQ_API_KEY", "gsk-x")
     s = Settings(_env_file=None)
@@ -124,7 +125,7 @@ def test_real_chatgroq_is_configured_without_network():
 
 
 @pytest.mark.live
-@pytest.mark.skipif(not os.getenv("GROQ_API_KEY"), reason="needs GROQ_API_KEY")
+@pytest.mark.skipif(not Settings().groq_api_key, reason="needs GROQ_API_KEY (env or .env)")
 def test_live_groq_structured_output():
     p = GroqProvider(Settings(llm_provider="groq"))
     value, usage = p.structured(Out, "Answer in one word.", "What colour is the sky on a clear day?")

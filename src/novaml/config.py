@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -69,6 +69,14 @@ class Settings(BaseSettings):
 
     anthropic_api_key: SecretStr | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
     groq_api_key: SecretStr | None = Field(default=None, validation_alias="GROQ_API_KEY")
+
+    @field_validator("anthropic_api_key", "groq_api_key", mode="before")
+    @classmethod
+    def _blank_key_is_none(cls, v):
+        # `GROQ_API_KEY=` left empty in .env must mean "no key", not an empty key.
+        if isinstance(v, SecretStr):
+            v = v.get_secret_value()
+        return v.strip() or None if isinstance(v, str) else v
 
     # --- Sandbox -------------------------------------------------------------
     sandbox_timeout_s: float = 30.0
