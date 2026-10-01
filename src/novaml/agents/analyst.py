@@ -20,8 +20,8 @@ from novaml.tools.insights import compute_insights
 
 
 class AnalystStep(BaseModel):
-    thought: str = Field(description="Brief reasoning about what to check next.")
-    action: Literal["run_code", "finish"]
+    thought: str = Field(default="", description="Brief reasoning about what to check next.")
+    action: Literal["run_code", "finish"] | None = Field(default=None, description="run_code to execute `code`, finish to report.")
     code: str | None = Field(default=None, description="pandas code using `df`; print() what you need to see.")
     insights: list[str] = Field(default_factory=list, description="On finish: concise, evidence-backed findings.")
     leakage_suspects: list[str] = Field(default_factory=list, description="On finish: columns that likely leak the target.")
@@ -52,7 +52,10 @@ class AnalystAgent(Agent):
 
         if gw.provider is not None:
             sandbox = ctx.sandbox or SubprocessSandbox(s.sandbox_timeout_s, s.sandbox_max_output_chars, s.sandbox_memory_mb)
-            questions = state.get("plan", {}).get("analysis_questions", [])
+            plan = state.get("plan", {})
+            questions = list(plan.get("analysis_questions", []))
+            if plan.get("suspected_leakage"):
+                questions.append(f"Do any of {plan['suspected_leakage']} leak the target (e.g. only filled in after the outcome)?")
             transcript: list[str] = []
             for i in range(s.analyst_max_steps + 1):
                 last = i == s.analyst_max_steps
@@ -67,7 +70,8 @@ class AnalystAgent(Agent):
                 step = d.value
                 if d.source == "policy":
                     break  # LLM unavailable mid-loop: keep the deterministic facts
-                if step.action == "finish" or last or not step.code:
+                wants_code = step.action == "run_code" or (step.action is None and bool(step.code))
+                if not wants_code or last or not step.code:
                     result["insights"] += [x for x in step.insights if x not in result["insights"]][:8]
                     cols = set(train.columns) - {target}
                     result["leakage_suspects"] = sorted(set(result["leakage_suspects"]) | {c for c in step.leakage_suspects if c in cols})
@@ -83,4 +87,6 @@ class AnalystAgent(Agent):
         store.save_json("analysis.json", result)
         msgs = [self.say(f"{len(result['insights'])} insights ({result['source']}, {len(result['steps'])} code steps)")]
         msgs += [self.say(f"- {x}") for x in result["insights"][:6]]
-        return {"analysis": {k: result[k] for k in ("insights", "leakage_suspects", "source")} | {"code_steps": len(result["steps"])}, "llm_calls": calls, "messages": msgs}
+        analysis = {k: result[k] for k in ("insights", "leakage_suspects", "source")}
+        analysis |= {"code_steps": len(result["steps"]), "feature_strength": facts["feature_strength"], "chance_score": facts["chance_score"]}
+        return {"analysis": analysis, "llm_calls": calls, "messages": msgs}

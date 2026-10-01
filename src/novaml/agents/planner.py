@@ -14,10 +14,14 @@ from novaml.tools.ml import METRICS, resolve_metric
 
 
 class RunPlan(BaseModel):
-    primary_metric: str = Field(description="Metric to optimise; one of the allowed metrics given.")
-    run_analysis: bool = Field(description="Whether an exploratory analysis step is worth its cost for this data.")
+    primary_metric: str = Field(default="", description="Metric to optimise; one of the allowed metrics given.")
+    run_analysis: bool = Field(default=True, description="Whether an exploratory analysis step is worth its cost for this data.")
     analysis_questions: list[str] = Field(default_factory=list, description="Up to 4 concrete questions for the analyst.")
     risks: list[str] = Field(default_factory=list, description="Data risks to watch: leakage, imbalance, drift, tiny n.")
+    suspected_leakage: list[str] = Field(
+        default_factory=list,
+        description="Columns that, from their meaning, are probably recorded after or because of the outcome.",
+    )
     rationale: str = ""
 
 
@@ -25,7 +29,9 @@ SYSTEM = (
     "You are the lead data scientist planning an automated modelling run. Given a data "
     "profile, choose the metric that best reflects success for this problem (e.g. a "
     "class-balanced metric when classes are imbalanced), decide whether exploratory "
-    "analysis is worth running, list the specific questions it should answer, and flag risks."
+    "analysis is worth running, list the specific questions it should answer, and flag risks. "
+    "Use domain knowledge to name columns that are likely recorded after or because of the "
+    "outcome (post-outcome leakage); the analyst will verify them against the data."
 )
 
 
@@ -67,6 +73,7 @@ class PlannerAgent(Agent):
         def validate(p: RunPlan) -> RunPlan:
             p.primary_metric = resolve_metric(pt, p.primary_metric, n_classes)
             p.analysis_questions = p.analysis_questions[:4]
+            p.suspected_leakage = [c for c in dict.fromkeys(p.suspected_leakage) if c in profile["columns"]]
             return p
 
         d = ctx.gateway(state).decide(
@@ -83,6 +90,8 @@ class PlannerAgent(Agent):
         plan = d.value
         msgs = [self.say(f"plan ({d.source}): optimise {plan.primary_metric}; analysis={'on' if plan.run_analysis else 'off'}")]
         msgs += [self.say(f"risk: {r}") for r in plan.risks]
+        if plan.suspected_leakage:
+            msgs.append(self.say(f"suspected leakage to verify: {plan.suspected_leakage}"))
         return {
             "plan": plan.model_dump(),
             "metric": plan.primary_metric,

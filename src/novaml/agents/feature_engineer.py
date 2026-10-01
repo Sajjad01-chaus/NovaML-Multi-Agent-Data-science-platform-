@@ -22,7 +22,9 @@ SYSTEM = (
     "numeric columns to log-transform, date-like columns to expand, and at most a few "
     "ratio features that have a plausible domain meaning. Missing values and categorical "
     "encoding are handled automatically downstream; do not plan for them. Only reference "
-    "column names that exist in the profile."
+    "column names that exist in the profile. Ratio operands must be existing numeric "
+    "columns (derived expressions such as sums are not supported). Always drop columns "
+    "the analyst flags as leakage."
 )
 
 
@@ -60,6 +62,12 @@ class FeatureEngineerAgent(Agent):
             policy=lambda: policy_plan(profile, analysis),
         )
         plan, warnings = validate_plan(d.value, profile, target)
+        # Guardrail: columns the analyst verified as leaking are dropped no matter what
+        # the plan says. Leakage silently inflates every downstream metric.
+        forced = [c for c in (analysis or {}).get("leakage_suspects", []) if c in profile["columns"] and c not in plan.drop_columns]
+        if forced and len(plan.drop_columns) + len(forced) < len(profile["columns"]):
+            plan.drop_columns += forced
+            warnings.append(f"dropped suspected target leakage: {forced}")
         return {
             "feature_plan": plan.model_dump(),
             "feature_warnings": warnings,

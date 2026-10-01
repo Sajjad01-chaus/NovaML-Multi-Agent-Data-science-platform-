@@ -109,7 +109,7 @@ class Settings(BaseSettings):
             return [m for m in self.llm_fallback_models if m != self.resolved_model()]
         if self.effective_provider() == "groq":
             # Separate free-tier quotas per model; order = quality, then speed.
-            return [m for m in ("llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant") if m != self.resolved_model()]
+            return [m for m in ("qwen/qwen3.8-27b", "openai/gpt-oss-20b") if m != self.resolved_model()]
         return []
 
     def resolved_prices(self) -> tuple[float, float]:

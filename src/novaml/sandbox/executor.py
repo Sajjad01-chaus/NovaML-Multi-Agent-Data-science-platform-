@@ -50,7 +50,7 @@ class Sandbox(Protocol):
 
 
 _RUNNER = r'''
-import builtins, io, json, sys, contextlib
+import ast, builtins, io, json, sys, contextlib
 job = json.load(open("job.json", encoding="utf-8"))
 if sys.platform != "win32":
     import resource
@@ -78,8 +78,16 @@ safe["__import__"] = guarded_import
 buf = io.StringIO()
 result = {"ok": True, "error": None}
 try:
+    # Notebook semantics: a trailing expression is echoed (e.g. `df.head()`).
+    tree = ast.parse(job["code"])
+    last = tree.body.pop() if tree.body and isinstance(tree.body[-1], ast.Expr) else None
+    scope = {"__builtins__": safe, "df": df, "pd": pd, "np": np}
     with contextlib.redirect_stdout(buf):
-        exec(compile(job["code"], "<analysis>", "exec"), {"__builtins__": safe, "df": df, "pd": pd, "np": np})
+        exec(compile(tree, "<analysis>", "exec"), scope)
+        if last is not None:
+            value = eval(compile(ast.Expression(last.value), "<analysis>", "eval"), scope)
+            if value is not None:
+                print(value)
 except BaseException as e:
     result = {"ok": False, "error": f"{type(e).__name__}: {e}"[:1000]}
 out = buf.getvalue()
@@ -91,6 +99,13 @@ with open("result.json", "w", encoding="utf-8") as f:
     json.dump(result, f)
 '''
 
+_SINGLE_THREAD_ENV = {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "ARROW_IO_THREADS": "1",
+}
 _ENV_KEEP = ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "TEMP", "TMP", "PATH", "LANG", "LC_ALL")
 
 
@@ -128,6 +143,9 @@ class SubprocessSandbox:
                 encoding="utf-8",
             )
             env = {k: os.environ[k] for k in _ENV_KEEP if k in os.environ}
+            # Single-threaded child: per-core thread pools (BLAS, OpenMP, Arrow) each
+            # reserve virtual memory and fail to start under RLIMIT_AS on many-core hosts.
+            env |= _SINGLE_THREAD_ENV
             try:
                 proc = subprocess.run(
                     [sys.executable, "-I", "runner.py"],

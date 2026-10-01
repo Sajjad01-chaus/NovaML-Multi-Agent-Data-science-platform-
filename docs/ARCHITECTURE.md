@@ -30,12 +30,25 @@ evals, and an easy A/B baseline: "LLM vs. policy" on the same benchmark.
 
 ### D2b. Free-tier friendly by design
 The default provider is Groq's free tier: it is used automatically when `GROQ_API_KEY` is set.
-Free-tier quotas are per model (roughly 30 req/min, 8K tokens/min and 200K tokens/day
-for `openai/gpt-oss-120b`), so `GroqProvider` walks a fallback chain of models on 429s,
-retired models, unsupported features, 5xx errors or unparseable output. Only an auth error
-stops the chain. Tokens burned by failed attempts still count against the run budget.
-Structured output uses tool calling, which every Groq chat model supports; Groq's strict
-JSON-schema mode is limited to a few models and forbids optional fields.
+Free-tier quotas are per model (roughly 30 req/min, 8K tokens/min and 200K tokens/day for
+`openai/gpt-oss-120b`), so `GroqProvider` walks a fallback chain (`gpt-oss-120b`, then
+`qwen3.8-27b`, then `gpt-oss-20b`) on 429s, retired models, 5xx errors or unparseable output.
+Only an auth error stops the chain. The chain is filtered once against the account's live
+model list, because Groq retires models (the original project's Llama models are gone).
+Groq validates tool calls server-side and rejects a call that omits a field, even when our
+schema gives it a default (`tool_use_failed`). The provider recovers the rejected arguments
+and validates them locally. Tokens burned by failed attempts still count against the
+run budget. A real Titanic run uses about 18K tokens over 10 calls.
+
+### D2c. Leakage is detected from data and enforced, not suggested
+Each column gets a cross-validated single-feature score (a depth-3 tree on the value, and
+separately on whether it is missing). A column is a leakage suspect only if it is
+near-perfect alone *and* beats a model trained on every other column by a clear margin:
+Titanic `boat` scores 0.97 vs 0.76 for everything else (leak); iris `petal width` scores
+0.95 vs 0.95 (real signal). The planner adds domain-knowledge suspicions for the analyst
+to verify. Verified suspects are force-dropped by the feature engineer regardless of the
+LLM's plan. This replaced Cramér's V, which rated a high-cardinality `ticket` column 0.92.
+On Titanic this changed the outcome from a leaked 0.97 balanced accuracy to an honest 0.78.
 
 ### D3. LLM output is data, never code, in the serving path
 Feature engineering is a declarative `FeaturePlan` executed by a fixed sklearn

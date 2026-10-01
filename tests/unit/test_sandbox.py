@@ -44,6 +44,20 @@ def test_policy_blocks_dangerous_code(sbx, code):
     assert not r.ok and r.blocked
 
 
+def test_trailing_expression_is_echoed_like_a_notebook(sbx):
+    r = sbx.run("x = df['a'].sum()\ndf.groupby('b')['a'].mean()", DF)
+    assert r.ok and "x    2.0" in r.stdout and "y    3.0" in r.stdout
+
+
+def test_realistic_frame_under_memory_limit():
+    """Regression: per-core thread pools crashed the child under RLIMIT_AS on many-core hosts."""
+    n = 2000
+    big = pd.DataFrame({"num": range(n), "cat": ["alpha", "beta", None, "delta"] * (n // 4), "y": [0, 1] * (n // 2)})
+    r = SubprocessSandbox(timeout_s=30, memory_mb=512).run("print(df.groupby('cat')['y'].mean().round(2).to_dict())", big)
+    assert r.ok, r.error
+    assert "alpha" in r.stdout
+
+
 def test_runtime_errors_are_reported_not_raised(sbx):
     r = sbx.run("print('before')\n1/0", DF)
     assert not r.ok and "ZeroDivisionError" in r.error and "before" in r.stdout

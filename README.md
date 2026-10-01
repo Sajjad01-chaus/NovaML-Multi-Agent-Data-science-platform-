@@ -18,9 +18,10 @@ streamlit run ui/streamlit_app.py
 ```
 
 **LLM: free Groq key.** Set `GROQ_API_KEY` (free at console.groq.com) and the agents'
-decisions are made by `openai/gpt-oss-120b`, falling back to `llama-3.3-70b-versatile`,
-`openai/gpt-oss-20b` and `llama-3.1-8b-instant` when a model hits its free-tier rate limit
-(each model has its own quota). Without a key, every decision is made by a deterministic
+decisions are made by `openai/gpt-oss-120b`, falling back to `qwen/qwen3.8-27b` and
+`openai/gpt-oss-20b` when a model hits its free-tier rate limit (each model has its own
+quota). The chain is checked against your account's live model list, so retired models
+are skipped automatically. Without a key, every decision is made by a deterministic
 policy, so the platform runs fully offline. Each run is capped at 60K tokens by default.
 See `.env.example`.
 

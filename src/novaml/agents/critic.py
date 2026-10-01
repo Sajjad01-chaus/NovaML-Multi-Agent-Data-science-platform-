@@ -23,7 +23,7 @@ Decision = Literal["accept", "tune", "revise_features", "try_other_models"]
 
 class CriticVerdict(BaseModel):
     decision: Decision
-    reasoning: str = Field(description="2-3 sentences grounded in the numbers given.")
+    reasoning: str = Field(default="", description="2-3 sentences grounded in the numbers given.")
     feature_feedback: str = Field(default="", description="For revise_features: what to change in the feature plan.")
 
 
@@ -33,7 +33,9 @@ SYSTEM = (
     "'accept' (good enough or further work unlikely to help), 'tune' (hyperparameter "
     "search on the best models), 'revise_features' (features look like the bottleneck), "
     "or 'try_other_models' (other model families may fit better). Watch for: no lift "
-    "over the baseline, large train-vs-CV gaps (overfitting), high CV variance."
+    "over the baseline, large train-vs-CV gaps (overfitting), high CV variance, and results "
+    "that are too good to be true for the domain (a near-perfect score usually means a "
+    "leaking column: choose revise_features and name the column in feature_feedback)."
 )
 
 
@@ -62,6 +64,8 @@ def summarize(state: RunState) -> dict[str, Any]:
         "models_tried": tried,
         "models_untried": sorted(set(REGISTRY) - set(tried)),
         "feature_plan": state.get("feature_plan"),
+        "single_feature_strength": (state.get("analysis") or {}).get("feature_strength", {}),
+        "leakage_dropped": (state.get("analysis") or {}).get("leakage_suspects", []),
         "rounds_used": max((e["round"] for e in lb), default=0),
         "tuned_already": any(e.get("mode") == "tune" for e in lb),
     }

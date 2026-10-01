@@ -45,16 +45,23 @@ def groq_settings(**kw):
     return Settings(_env_file=None, llm_provider="groq", groq_api_key=SecretStr("gsk-test"), **kw)
 
 
-def provider(behaviours, **kw):
+CHAIN = ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
+
+
+def provider(behaviours, live_models=None, **kw):
     log: list[str] = []
-    p = GroqProvider(groq_settings(**kw), chat_factory=lambda m: FakeChat(m, behaviours.get(m, "ok"), log))
+    p = GroqProvider(
+        groq_settings(**kw),
+        chat_factory=lambda m: FakeChat(m, behaviours.get(m, "ok"), log),
+        list_models=lambda: live_models,  # no network in unit tests
+    )
     return p, log
 
 
 def test_defaults_target_free_tier():
     s = groq_settings()
     assert s.resolved_model() == "openai/gpt-oss-120b"
-    assert s.resolved_fallback_models()[0] == "llama-3.3-70b-versatile"
+    assert s.resolved_fallback_models() == CHAIN[1:]
     assert s.run_token_budget <= 200_000  # well inside the free daily quota
     assert s.resolved_prices() == (0.0, 0.0)
 
@@ -82,15 +89,15 @@ def test_primary_model_answers():
 def test_rate_limited_model_falls_back_to_next():
     p, log = provider({"openai/gpt-oss-120b": api_error(groq.RateLimitError, 429)})
     value, usage = p.structured(Out, "s", "u")
-    assert value.answer == "from llama-3.3-70b-versatile" and usage.model == "llama-3.3-70b-versatile"
-    assert log == ["openai/gpt-oss-120b", "llama-3.3-70b-versatile"]
+    assert value.answer == "from qwen/qwen3.8-27b" and usage.model == "qwen/qwen3.8-27b"
+    assert log == CHAIN[:2]
 
 
 def test_retired_model_and_bad_output_fall_through():
     p, log = provider(
         {
             "openai/gpt-oss-120b": api_error(groq.NotFoundError, 404),
-            "llama-3.3-70b-versatile": "garbage",
+            "qwen/qwen3.8-27b": "garbage",
         }
     )
     value, usage = p.structured(Out, "s", "u")
@@ -106,13 +113,53 @@ def test_auth_error_stops_immediately():
 
 
 def test_all_models_exhausted_falls_back_to_policy_and_counts_tokens():
-    garbage = dict.fromkeys(["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b", "llama-3.1-8b-instant"], "garbage")
+    garbage = dict.fromkeys(CHAIN, "garbage")
     p, _ = provider(garbage)
     gw = LLMGateway(p, groq_settings())
     d = gw.decide(agent="t", schema=Out, system="s", user="u", policy=lambda: Out(answer="policy"))
     assert d.source == "policy" and "all models failed" in d.record["error"]
-    assert d.record["input_tokens"] + d.record["output_tokens"] == 200
-    assert gw.tokens_spent == 200
+    assert d.record["input_tokens"] + d.record["output_tokens"] == 150
+    assert gw.tokens_spent == 150
+
+
+def test_chain_is_filtered_to_models_the_account_has():
+    p, log = provider({}, live_models={"openai/gpt-oss-20b", "whisper-large-v3"})
+    value, _ = p.structured(Out, "s", "u")
+    assert value.answer == "from openai/gpt-oss-20b" and log == ["openai/gpt-oss-20b"]
+    assert p.model == "openai/gpt-oss-20b"
+
+
+def test_model_listing_failure_keeps_configured_chain():
+    def boom():
+        raise RuntimeError("network down")
+
+    p = GroqProvider(groq_settings(), chat_factory=lambda m: FakeChat(m, "ok", []), list_models=boom)
+    assert p.structured(Out, "s", "u")[1].model == CHAIN[0]
+
+
+def tool_use_failed(generation: str):
+    req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    body = {"error": {"code": "tool_use_failed", "message": "missing properties", "failed_generation": generation}}
+    return groq.BadRequestError("tool_use_failed", response=httpx.Response(400, request=req), body=body)
+
+
+class Step(BaseModel):
+    thought: str = ""
+    code: str
+
+
+def test_server_rejected_tool_call_is_recovered_locally():
+    """Groq rejects calls missing a field even when our schema has a default for it."""
+    gen = '{"name": "Step", "arguments": {"code": "print(df.shape)"}}'
+    p, log = provider({CHAIN[0]: tool_use_failed(gen)})
+    value, usage = p.structured(Step, "s", "u")
+    assert value.code == "print(df.shape)" and usage.model == CHAIN[0] and log == [CHAIN[0]]
+
+
+def test_unrecoverable_tool_call_falls_through():
+    p, log = provider({CHAIN[0]: tool_use_failed('{"name": "Step", "arguments": {}}')})
+    value, usage = p.structured(Out, "s", "u")
+    assert usage.model == CHAIN[1]
 
 
 def test_real_chatgroq_is_configured_without_network():

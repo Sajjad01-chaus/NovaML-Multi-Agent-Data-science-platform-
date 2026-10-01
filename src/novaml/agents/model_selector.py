@@ -16,7 +16,7 @@ MAX_CANDIDATES = 4
 
 class ModelSelection(BaseModel):
     models: list[str] = Field(description="2-4 model names, chosen only from the provided registry.")
-    reasoning: str = Field(description="Why these models suit this dataset, in 2-4 sentences.")
+    reasoning: str = Field(default="", description="Why these models suit this dataset, in 2-4 sentences.")
 
 
 SYSTEM = (
