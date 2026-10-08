@@ -1,0 +1,462 @@
+{
+  "mode": "policy",
+  "created_at": "2026-10-08T08:56:04+00:00",
+  "python": "3.12.3",
+  "suite": "core",
+  "summary": {
+    "cases": 12,
+    "ran": 12,
+    "cases_passed": 12,
+    "checks_passed": 35,
+    "checks_total": 35,
+    "decision_checks_passed": 23,
+    "decision_checks_total": 23,
+    "mean_lift_over_baseline": 0.5018,
+    "llm_calls": 48,
+    "llm_decision_rate": 0.0,
+    "invalid_output_rate": 0.0,
+    "tokens": 0,
+    "seconds": 128.5
+  },
+  "cases": [
+    {
+      "case": "iris",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "balanced_accuracy",
+      "score": 0.9667,
+      "baseline_score": 0.3333,
+      "optimised_metric": "f1_macro",
+      "best_model": "linear",
+      "dropped": [],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.9667 >= 0.9"
+        },
+        {
+          "name": "keep:petal width (cm)",
+          "passed": true,
+          "detail": "kept"
+        },
+        {
+          "name": "keep:petal length (cm)",
+          "passed": true,
+          "detail": "kept"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 6.2,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "wine",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "balanced_accuracy",
+      "score": 1.0,
+      "baseline_score": 0.3333,
+      "optimised_metric": "f1_macro",
+      "best_model": "linear",
+      "dropped": [],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "1.0 >= 0.9"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 6.2,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "breast_cancer",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "balanced_accuracy",
+      "score": 0.9692,
+      "baseline_score": 0.5,
+      "optimised_metric": "f1_macro",
+      "best_model": "linear",
+      "dropped": [],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.9692 >= 0.92"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 9.0,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "digits",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "balanced_accuracy",
+      "score": 0.969,
+      "baseline_score": 0.1,
+      "optimised_metric": "balanced_accuracy",
+      "best_model": "random_forest",
+      "dropped": [
+        "pixel_0_0",
+        "pixel_4_0",
+        "pixel_4_7"
+      ],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.969 >= 0.9"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 38.6,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "diabetes",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "r2",
+      "score": 0.4541,
+      "baseline_score": -0.012,
+      "optimised_metric": "r2",
+      "best_model": "linear",
+      "dropped": [],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.4541 >= 0.35"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 5.4,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "leak_missingness",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "balanced_accuracy",
+      "score": 0.7772,
+      "baseline_score": 0.5,
+      "optimised_metric": "f1_macro",
+      "best_model": "gradient_boosting",
+      "dropped": [
+        "boat",
+        "passenger_id"
+      ],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.7772 >= 0.62"
+        },
+        {
+          "name": "max_score",
+          "passed": true,
+          "detail": "0.7772 <= 0.85 (above = leakage got through)"
+        },
+        {
+          "name": "drop:boat",
+          "passed": true,
+          "detail": "dropped"
+        },
+        {
+          "name": "drop:passenger_id",
+          "passed": true,
+          "detail": "dropped"
+        },
+        {
+          "name": "keep:sex",
+          "passed": true,
+          "detail": "kept"
+        },
+        {
+          "name": "keep:pclass",
+          "passed": true,
+          "detail": "kept"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 5.8,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "leak_target_copy",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "r2",
+      "score": 0.8562,
+      "baseline_score": -0.0325,
+      "optimised_metric": "r2",
+      "best_model": "gradient_boosting",
+      "dropped": [
+        "price_in_cents"
+      ],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.8562 >= 0.6"
+        },
+        {
+          "name": "max_score",
+          "passed": true,
+          "detail": "0.8562 <= 0.97 (above = leakage got through)"
+        },
+        {
+          "name": "drop:price_in_cents",
+          "passed": true,
+          "detail": "dropped"
+        },
+        {
+          "name": "keep:f1",
+          "passed": true,
+          "detail": "kept"
+        },
+        {
+          "name": "keep:f2",
+          "passed": true,
+          "detail": "kept"
+        },
+        {
+          "name": "keep:f3",
+          "passed": true,
+          "detail": "kept"
+        },
+        {
+          "name": "keep:f4",
+          "passed": true,
+          "detail": "kept"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 3.8,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "messy_churn",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "balanced_accuracy",
+      "score": 0.7113,
+      "baseline_score": 0.5,
+      "optimised_metric": "f1_macro",
+      "best_model": "gradient_boosting",
+      "dropped": [
+        "constant_flag",
+        "customer_id"
+      ],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.7113 >= 0.62"
+        },
+        {
+          "name": "drop:customer_id",
+          "passed": true,
+          "detail": "dropped"
+        },
+        {
+          "name": "drop:constant_flag",
+          "passed": true,
+          "detail": "dropped"
+        },
+        {
+          "name": "keep:tenure_months",
+          "passed": true,
+          "detail": "kept"
+        },
+        {
+          "name": "keep:support_tickets",
+          "passed": true,
+          "detail": "kept"
+        },
+        {
+          "name": "keep:plan",
+          "passed": true,
+          "detail": "kept"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 6.4,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "imbalanced_fraud",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "balanced_accuracy",
+      "score": 0.8401,
+      "baseline_score": 0.5,
+      "optimised_metric": "roc_auc",
+      "best_model": "linear",
+      "dropped": [],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.8401 >= 0.7"
+        },
+        {
+          "name": "metric_choice",
+          "passed": true,
+          "detail": "roc_auc in ['balanced_accuracy', 'roc_auc', 'f1_macro']"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 29.0,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "high_cardinality_noise",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "balanced_accuracy",
+      "score": 0.8079,
+      "baseline_score": 0.5,
+      "optimised_metric": "f1_macro",
+      "best_model": "linear",
+      "dropped": [],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.8079 >= 0.7"
+        },
+        {
+          "name": "max_score",
+          "passed": true,
+          "detail": "0.8079 <= 0.9 (above = leakage got through)"
+        },
+        {
+          "name": "keep:signal",
+          "passed": true,
+          "detail": "kept"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 6.2,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "pure_noise",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "balanced_accuracy",
+      "score": 0.5189,
+      "baseline_score": 0.5,
+      "optimised_metric": "f1_macro",
+      "best_model": "linear",
+      "dropped": [],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.5189 >= 0.4"
+        },
+        {
+          "name": "max_score",
+          "passed": true,
+          "detail": "0.5189 <= 0.6 (above = leakage got through)"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 7.1,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "skewed_regression",
+      "mode": "policy",
+      "status": "completed",
+      "eval_metric": "r2",
+      "score": 0.8733,
+      "baseline_score": -0.0,
+      "optimised_metric": "r2",
+      "best_model": "linear",
+      "dropped": [],
+      "checks": [
+        {
+          "name": "min_score",
+          "passed": true,
+          "detail": "0.8733 >= 0.8"
+        },
+        {
+          "name": "keep:sqft",
+          "passed": true,
+          "detail": "kept"
+        }
+      ],
+      "llm_calls": 4,
+      "llm_decisions": 0,
+      "policy_fallbacks": 4,
+      "invalid_outputs": 0,
+      "tokens": 0,
+      "seconds": 4.8,
+      "error": null,
+      "passed": true
+    }
+  ]
+}

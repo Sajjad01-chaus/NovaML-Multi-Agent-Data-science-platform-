@@ -19,6 +19,8 @@ from novaml.tools.ml import (
     tune_pipeline,
 )
 
+IMBALANCE_SHARE = 0.2
+
 
 class TrainerAgent(Agent):
     name = "trainer"
@@ -31,6 +33,9 @@ class TrainerAgent(Agent):
         X, y = train.drop(columns=[target]), train[target]
         rnd = _round(state)
         mode = state.get("train_mode", "fit")
+        # Imbalanced targets: reweight classes so models don't just predict the majority.
+        share = state["profile"]["target"].get("minority_share")
+        class_weight = "balanced" if pt == "classification" and share is not None and share < IMBALANCE_SHARE else None
 
         if mode == "tune":
             todo = list(state.get("tune_models") or [])
@@ -41,7 +46,7 @@ class TrainerAgent(Agent):
 
         entries, msgs = [], []
         for name in todo:
-            pipe = build_pipeline(name, pt, state.get("feature_plan"), s.random_state)
+            pipe = build_pipeline(name, pt, state.get("feature_plan"), s.random_state, class_weight)
             cv = dict(problem_type=pt, metric=metric, folds=s.cv_folds, seed=s.random_state, n_jobs=s.n_jobs)
             try:
                 if mode == "tune":
@@ -59,7 +64,7 @@ class TrainerAgent(Agent):
                     "round": rnd,
                     "model": name,
                     "mode": mode,
-                    "params": params,
+                    "params": params | ({"class_weight": class_weight} if class_weight and name != BASELINE else {}),
                     "artifact": key,
                     **stats,
                     "overfit_gap": stats["train_score"] - stats["cv_score"],

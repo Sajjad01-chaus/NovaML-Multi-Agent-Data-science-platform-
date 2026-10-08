@@ -24,7 +24,9 @@ SYSTEM = (
     "encoding are handled automatically downstream; do not plan for them. Only reference "
     "column names that exist in the profile. Ratio operands must be existing numeric "
     "columns (derived expressions such as sums are not supported). Always drop columns "
-    "the analyst flags as leakage."
+    "the analyst flags as leakage. Only drop identifiers, leakage, constant or near-empty "
+    "columns: never drop a feature for weak correlation or redundancy (it may matter in "
+    "interactions, and the models handle it); such drops are rejected."
 )
 
 
@@ -35,6 +37,14 @@ def policy_plan(profile: dict[str, Any], analysis: dict[str, Any] | None) -> Fea
         plan.drop_columns += leaks
         plan.rationale += f"; drop suspected leakage {leaks}"
     return plan
+
+
+def droppable(profile: dict[str, Any], analysis: dict[str, Any] | None, plan: dict[str, Any] | None) -> set[str]:
+    """Columns there is evidence to drop: structural junk, verified or domain-suspected leaks."""
+    cols = profile["columns"]
+    junk = {c for c, i in cols.items() if i.get("id_like") or i.get("constant") or i.get("missing_pct", 0) > 95}
+    leaks = set((analysis or {}).get("leakage_suspects", [])) | set((plan or {}).get("suspected_leakage", []))
+    return junk | (leaks & set(cols))
 
 
 class FeatureEngineerAgent(Agent):
@@ -62,6 +72,15 @@ class FeatureEngineerAgent(Agent):
             policy=lambda: policy_plan(profile, analysis),
         )
         plan, warnings = validate_plan(d.value, profile, target)
+        # Guardrail: drops need evidence. Evals showed the LLM discarding real signal
+        # (e.g. both halves of an f3*f4 interaction, "redundant" correlated features).
+        # Models cope with weak or correlated columns; discarded data is gone for good.
+        if d.used_llm:
+            allowed = droppable(profile, analysis, state.get("plan"))
+            rejected = [c for c in plan.drop_columns if c not in allowed]
+            if rejected:
+                plan.drop_columns = [c for c in plan.drop_columns if c in allowed]
+                warnings.append(f"kept {rejected}: no evidence they are identifiers, leakage, constant or empty")
         # Guardrail: columns the analyst verified as leaking are dropped no matter what
         # the plan says. Leakage silently inflates every downstream metric.
         forced = [c for c in (analysis or {}).get("leakage_suspects", []) if c in profile["columns"] and c not in plan.drop_columns]

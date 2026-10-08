@@ -150,3 +150,14 @@ def test_provider_outage_mid_run_still_completes(settings, iris_csv):
     assert r.status == "completed", r.errors
     errs = [c["error"] for c in r.state["llm_calls"] if c["error"]]
     assert any("503" in e for e in errs) and any("timeout" in e for e in errs)
+
+
+def test_llm_cannot_drop_real_features_without_evidence(settings, iris_csv):
+    """Evals caught the LLM discarding real signal; drops now need evidence."""
+    p = ScriptedProvider({"FeaturePlan": [{"drop_columns": ["petal width (cm)", "sepal width (cm)"], "rationale": "redundant"}]})
+    svc = NovaML(settings, provider=p)
+    r = svc.start(iris_csv, "species")
+    svc.close()
+    assert r.status == "completed", r.errors
+    assert r.state["feature_plan"]["drop_columns"] == []
+    assert any("no evidence" in w for w in r.state["feature_warnings"])
