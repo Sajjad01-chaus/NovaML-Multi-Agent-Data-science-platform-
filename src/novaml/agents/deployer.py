@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import tempfile
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from novaml.agents.base import Agent, AgentContext
@@ -23,7 +25,9 @@ class DeployerAgent(Agent):
         X_example = store.load_frame(state["data_refs"]["train"]).drop(columns=[target]).head(50)
 
         card = build_model_card(state)
-        bundle = write_bundle(store.path("bundle/model.joblib").parent, pipeline, X_example, card)
+        with tempfile.TemporaryDirectory(prefix="novaml-bundle-") as tmp:
+            write_bundle(Path(tmp), pipeline, X_example, card)
+            bundle = store.put_dir("bundle", Path(tmp))
         store.save_json("model_card.json", card)
         return {
             "bundle_dir": str(bundle),

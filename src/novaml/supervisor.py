@@ -21,7 +21,7 @@ STEP_BUDGET_EXCEEDED = "step budget exceeded"
 
 
 def next_step(state: RunState, settings: Settings) -> str:
-    if state.get("status") in ("failed", "completed"):
+    if state.get("status") in ("failed", "completed", "cancelled"):
         return END
     if len(state.get("events", [])) >= settings.max_graph_steps:
         # Out of budget: ship the best model so far if we have one.

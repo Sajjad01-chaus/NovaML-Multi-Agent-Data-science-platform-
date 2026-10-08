@@ -1,20 +1,65 @@
+import zipfile
+
+import boto3
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+from moto import mock_aws
 
-from novaml.artifacts import ArtifactStore
+from novaml.artifacts import LocalArtifactStore, S3ArtifactStore, materialize_bundle
 from novaml.serving.app import create_app
 from novaml.serving.bundle import write_bundle
 from novaml.tools.ml import build_pipeline
 
 
-def test_artifact_keys_cannot_escape_run_dir(tmp_path):
-    s = ArtifactStore(tmp_path, "run1")
-    for bad in ["../x", "a/../../x", "/etc/passwd", "C:\\x", "a b"]:
-        with pytest.raises(ValueError):
-            s.path(bad)
+@pytest.fixture(params=["local", "s3"])
+def store(request, tmp_path, monkeypatch):
+    if request.param == "local":
+        yield LocalArtifactStore(tmp_path, "run1")
+        return
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    with mock_aws():
+        client = boto3.client("s3", region_name="us-east-1")
+        client.create_bucket(Bucket="novaml-test")
+        yield S3ArtifactStore("novaml-test", "run1", client=client)
+
+
+def test_store_roundtrips_every_type(store):
+    df = pd.DataFrame({"a": [1, 2], "b": ["x", None]})
+    store.save_frame("data/train.parquet", df)
+    pd.testing.assert_frame_equal(store.load_frame("data/train.parquet"), df)
+    store.save_json("card.json", {"k": [1, 2]})
+    assert store.load_json("card.json") == {"k": [1, 2]}
+    store.save_model("models/m.joblib", {"fitted": True})
+    assert store.load_model("models/m.joblib") == {"fitted": True}
+    assert store.exists("card.json") and not store.exists("nope.json")
+    assert store.list("models/") == ["models/m.joblib"]
+
+
+def test_directories_upload_download_and_zip(store, tmp_path):
+    src = tmp_path / "bundle-src"
+    (src / "sub").mkdir(parents=True)
+    (src / "model.joblib").write_bytes(b"m")
+    (src / "sub" / "schema.json").write_text("{}")
+    store.put_dir("bundle", src)
+    local = materialize_bundle(store)
+    assert (local / "model.joblib").read_bytes() == b"m" and (local / "sub" / "schema.json").exists()
+    import io
+
+    names = zipfile.ZipFile(io.BytesIO(store.zip_dir("bundle"))).namelist()
+    assert sorted(names) == ["model.joblib", "sub/schema.json"]
+
+
+@pytest.mark.parametrize("bad", ["../x", "a/../../x", "/etc/passwd", r"C:\x", "a b"])
+def test_keys_cannot_escape_namespace(store, bad):
     with pytest.raises(ValueError):
-        ArtifactStore(tmp_path, "../evil")
+        store.put_bytes(bad, b"x")
+
+
+def test_namespaces_are_validated(tmp_path):
+    with pytest.raises(ValueError):
+        LocalArtifactStore(tmp_path, "../evil")
 
 
 def test_bundle_with_hostile_column_names_serves_safely(tmp_path):

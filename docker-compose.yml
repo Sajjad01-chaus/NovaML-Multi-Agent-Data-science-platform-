@@ -1,0 +1,88 @@
+# Local production-like stack:  docker compose up --build  (UI: http://localhost:8501, API docs: http://localhost:8080/docs)
+# Scale workers:                docker compose up --scale worker=4
+# Put GROQ_API_KEY in .env to let the agents use an LLM; without it they run on policies.
+
+x-novaml-env: &novaml-env
+  NOVAML_DATABASE_URL: postgresql://novaml:novaml@postgres:5432/novaml
+  NOVAML_ARTIFACT_BACKEND: s3
+  NOVAML_S3_BUCKET: novaml
+  NOVAML_S3_ENDPOINT_URL: http://minio:9000
+  NOVAML_S3_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: novaml
+  AWS_SECRET_ACCESS_KEY: novaml-secret
+  AWS_DEFAULT_REGION: us-east-1
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: novaml
+      POSTGRES_PASSWORD: novaml
+      POSTGRES_DB: novaml
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novaml"]
+      interval: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: novaml
+      MINIO_ROOT_PASSWORD: novaml-secret
+    ports: ["9001:9001"]  # MinIO console
+    volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      retries: 20
+
+  minio-init:  # one-shot: create the bucket
+    image: minio/mc
+    depends_on: {minio: {condition: service_healthy}}
+    entrypoint: ["sh", "-c", "mc alias set local http://minio:9000 novaml novaml-secret && mc mb --ignore-existing local/novaml"]
+
+  init:  # one-shot: create tables before api/workers start (no racing CREATE TABLEs)
+    build: .
+    image: novaml:local
+    command: ["novaml", "init"]
+    environment: *novaml-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
+
+  api:
+    image: novaml:local
+    command: ["novaml", "api", "--host", "0.0.0.0", "--port", "8080"]
+    environment: *novaml-env
+    env_file: [{path: .env, required: false}]
+    ports: ["8080:8080"]
+    depends_on: {init: {condition: service_completed_successfully}}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 10
+
+  worker:
+    image: novaml:local
+    command: ["novaml", "worker"]
+    environment: *novaml-env
+    env_file: [{path: .env, required: false}]
+    depends_on: {init: {condition: service_completed_successfully}}
+    deploy: {replicas: 2}
+    stop_grace_period: 60s  # SIGTERM lets the current job finish
+
+  ui:
+    image: novaml:local
+    command: ["streamlit", "run", "ui/streamlit_app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    environment:
+      NOVAML_API_URL: http://api:8080
+    ports: ["8501:8501"]
+    depends_on: {api: {condition: service_healthy}}
+
+volumes:
+  pgdata:
+  miniodata:

@@ -91,6 +91,29 @@ system prompt tells the model to treat them as data. Independently, every answer
 schema-constrained and validated against the registry and the real columns, so an
 injected instruction can at worst produce a rejected answer.
 
+### D8. The job queue is a Postgres table
+Workers claim jobs with `SELECT ... FOR UPDATE SKIP LOCKED`, so they never block each other
+or take the same job. A run and its first job are inserted in one transaction, so there is
+no "run exists but its job was lost" failure mode between two systems. Postgres is already
+required for checkpoints, so this adds no new service to operate. Celery or Redis would add
+a broker with its own durability and delivery semantics to reason about. Throughput is far
+beyond this workload, where each job runs for seconds to minutes. If that ever changed, the
+`Database` queue methods are the seam to swap.
+
+### D9. Leases, heartbeats and checkpoint resume
+A claimed job has a lease (`NOVAML_WORKER_LEASE_S`) that a heartbeat thread extends. A worker
+that dies, even by `kill -9`, stops heart-beating. Its lease expires, the job is re-queued
+(dead-lettered after `NOVAML_JOB_MAX_ATTEMPTS`), and the next worker calls `start()` with the
+same `run_id`. The service sees an existing checkpoint and continues from it rather than
+starting over. Only the interrupted agent re-runs. Agents write artifacts under deterministic
+keys, so re-running one is idempotent.
+
+### D10. The API never runs agents
+Requests validate input, touch the registry and queue, and read state. Request latency stays
+flat regardless of run length, and API and worker capacity scale independently
+(`--scale worker=N`). Human approval is a compare-and-set on run status in the same
+transaction that enqueues the resume job, so a double submit cannot resume twice.
+
 ## Bounded cost and time
 
 | Budget | Setting | Default |
@@ -101,6 +124,17 @@ injected instruction can at worst produce a rejected answer.
 | Analyst code steps | `NOVAML_ANALYST_MAX_STEPS` | 4 |
 | Sandbox wall-clock per snippet | `NOVAML_SANDBOX_TIMEOUT_S` | 30s |
 | Tuning iterations per model | `NOVAML_TUNING_ITERATIONS` | 10 |
+
+## Storage backends
+
+| | dev / tests | production |
+|---|---|---|
+| Run registry, queue, events | SQLite (WAL, `BEGIN IMMEDIATE`) | Postgres |
+| Checkpoints | `SqliteSaver` | `PostgresSaver` (connection pool) |
+| Artifacts | `LocalArtifactStore` | `S3ArtifactStore` (S3, MinIO, R2) |
+
+One code path (SQLAlchemy Core, an `ArtifactStore` interface). The server test suite runs
+against both columns.
 
 ## Observability (today)
 

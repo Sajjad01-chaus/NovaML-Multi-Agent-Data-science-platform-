@@ -4,6 +4,8 @@
     novaml resume <run_id> --approve random_forest linear
     novaml status <run_id>
     novaml serve <bundle_dir> [--port 8000]
+    novaml api [--host 0.0.0.0] [--port 8080]
+    novaml worker
     novaml eval [--suite core|extended|all] [--mode policy|llm|both] [--gate evals/baseline_policy.json]
 """
 
@@ -53,6 +55,12 @@ def main(argv: list[str] | None = None) -> int:
     sv.add_argument("bundle_dir")
     sv.add_argument("--port", type=int, default=8000)
 
+    ap = sub.add_parser("api", help="run the HTTP API")
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=8080)
+    sub.add_parser("worker", help="run a queue worker")
+    sub.add_parser("init", help="create database tables and checkpoint schema (idempotent)")
+
     ev = sub.add_parser("eval", help="run the benchmark suite")
     ev.add_argument("--suite", default="core", choices=["core", "extended", "all"])
     ev.add_argument("--cases", nargs="+", help="run only these cases")
@@ -67,6 +75,26 @@ def main(argv: list[str] | None = None) -> int:
 
     if a.cmd == "eval":
         return _eval(a)
+    if a.cmd == "api":
+        import uvicorn
+
+        uvicorn.run("novaml.server.api:app_factory", factory=True, host=a.host, port=a.port, proxy_headers=True)
+        return 0
+    if a.cmd == "init":
+        from novaml.server.db import Database
+        from novaml.service import open_checkpointer
+
+        s = Settings()
+        Database(s.sqlalchemy_url()).dispose()
+        _, close = open_checkpointer(s)
+        close()
+        print("initialised", "postgres" if s.is_postgres else "sqlite")
+        return 0
+    if a.cmd == "worker":
+        from novaml.server.worker import main as worker_main
+
+        worker_main()
+        return 0
 
     if a.cmd == "serve":
         import uvicorn

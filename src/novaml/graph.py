@@ -57,7 +57,7 @@ def build_graph(ctx: AgentContext, checkpointer: Any = None):
 
     def supervisor(state: RunState) -> dict[str, Any]:
         # Out of step budget with nothing to ship: fail loudly rather than stall.
-        if next_step(state, ctx.settings) == END and state.get("status") not in ("failed", "completed"):
+        if next_step(state, ctx.settings) == END and state.get("status") not in ("failed", "completed", "cancelled"):
             return {"status": "failed", "errors": [f"supervisor: {STEP_BUDGET_EXCEEDED} or no route"]}
         return {}
 

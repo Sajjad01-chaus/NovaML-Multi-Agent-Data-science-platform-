@@ -20,6 +20,7 @@ class RunState(TypedDict, total=False):
     dataset_path: str
     target: str
     requested_problem_type: str | None
+    auto_approve: bool  # per-run override of settings.auto_approve
 
     # Data understanding
     problem_type: str
