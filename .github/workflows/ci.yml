@@ -13,9 +13,57 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[dev,serve,ui,groq,anthropic]"
-      - run: ruff check src tests
+      - run: pip install -e ".[dev,serve,server,ui,groq,anthropic]"
+      - run: ruff check src tests ui scripts
       - run: pytest -m "not live" --cov=novaml --cov-report=term-missing
+
+  # The same API/queue/worker tests, on real Postgres and S3 (MinIO) instead of SQLite + files.
+  services:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: novaml
+          POSTGRES_PASSWORD: novaml
+          POSTGRES_DB: novaml
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U novaml" --health-interval 3s --health-retries 20
+    env:
+      NOVAML_TEST_DATABASE_URL: postgresql://novaml:novaml@localhost:5432/novaml
+      NOVAML_TEST_S3_ENDPOINT: http://localhost:9000
+      AWS_ACCESS_KEY_ID: novaml
+      AWS_SECRET_ACCESS_KEY: novaml-secret
+      AWS_DEFAULT_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=novaml -e MINIO_ROOT_PASSWORD=novaml-secret minio/minio server /data
+          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 2; done
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev,server]"
+      - run: pytest tests/integration/test_server.py -k postgres -v
+
+  # Boots the real docker compose stack and pushes a run through it.
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[ui]"
+      - run: python scripts/smoke.py --api http://localhost:8080
+      - if: failure()
+        run: docker compose logs --tail 200
+      - if: always()
+        run: docker compose down -v
 
   # Offline benchmark (deterministic policies, no API key): fails the build if a
   # decision check that used to pass now fails, or a holdout score drops.

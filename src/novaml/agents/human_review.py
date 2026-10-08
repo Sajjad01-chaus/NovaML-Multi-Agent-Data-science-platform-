@@ -15,7 +15,7 @@ class HumanReviewAgent(Agent):
 
     def run(self, state: RunState, ctx: AgentContext) -> dict[str, Any]:
         candidates = state["candidate_models"]
-        if ctx.settings.auto_approve:
+        if ctx.settings.auto_approve or state.get("auto_approve"):
             return {"approved_models": candidates, "needs_training": True, "messages": [self.say("auto-approved")]}
 
         # Pauses the graph; the checkpoint is persisted and the run can be resumed

@@ -22,6 +22,23 @@ class Settings(BaseSettings):
     data_dir: Path = Path("var")
     """Root for run artifacts and the checkpoint database."""
 
+    database_url: str | None = None
+    """Run registry, job queue and checkpoints. `postgresql://...` in production;
+    defaults to SQLite files under `data_dir` (single node / dev)."""
+    artifact_backend: Literal["local", "s3"] = "local"
+    s3_bucket: str | None = None
+    s3_endpoint_url: str | None = None
+    """Set for MinIO / R2 / other S3-compatible stores; credentials come from the
+    standard AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY environment variables."""
+    s3_region: str | None = None
+
+    # --- Workers ---------------------------------------------------------------
+    worker_lease_s: float = 120.0
+    """A claimed job is re-queued if its worker stops heart-beating for this long."""
+    worker_heartbeat_s: float = 15.0
+    worker_poll_s: float = 1.0
+    job_max_attempts: int = 3
+
     # --- Ingestion guardrails ------------------------------------------------
     max_upload_mb: int = 200
     max_rows: int = 2_000_000
@@ -90,6 +107,24 @@ class Settings(BaseSettings):
     @property
     def checkpoint_path(self) -> Path:
         return self.data_dir / "checkpoints.sqlite"
+
+    @property
+    def is_postgres(self) -> bool:
+        return bool(self.database_url and self.database_url.startswith(("postgres://", "postgresql")))
+
+    def sqlalchemy_url(self) -> str:
+        if not self.database_url:
+            return f"sqlite:///{(self.data_dir / 'novaml.db').as_posix()}"
+        url = self.database_url
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://") :]
+        if url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url[len("postgresql://") :]
+        return url
+
+    def libpq_url(self) -> str:
+        """Plain libpq URL for psycopg / the LangGraph Postgres checkpointer."""
+        return self.sqlalchemy_url().replace("postgresql+psycopg://", "postgresql://", 1)
 
     def effective_provider(self) -> str:
         if self.llm_provider != "auto":
