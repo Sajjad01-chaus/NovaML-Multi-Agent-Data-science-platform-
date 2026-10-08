@@ -51,7 +51,6 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       minio-init: {condition: service_completed_successfully}
-    healthcheck: {disable: true}
 
   api:
     image: novaml:local
@@ -60,6 +59,12 @@ services:
     env_file: [{path: .env, required: false}]
     ports: ["8080:8080"]
     depends_on: {init: {condition: service_completed_successfully}}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 10
 
   worker:
     image: novaml:local
@@ -69,7 +74,6 @@ services:
     depends_on: {init: {condition: service_completed_successfully}}
     deploy: {replicas: 2}
     stop_grace_period: 60s  # SIGTERM lets the current job finish
-    healthcheck: {disable: true}
 
   ui:
     image: novaml:local
@@ -78,7 +82,6 @@ services:
       NOVAML_API_URL: http://api:8080
     ports: ["8501:8501"]
     depends_on: {api: {condition: service_healthy}}
-    healthcheck: {disable: true}
 
 volumes:
   pgdata:
