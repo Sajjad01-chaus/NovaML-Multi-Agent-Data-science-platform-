@@ -26,12 +26,13 @@ MAX_FEATURES = 100
 TOP_LEVELS = 30
 
 # A column is a leakage suspect when, on its own, it predicts the target almost
-# perfectly AND far better than every other column combined. The second condition
-# separates leaks (Titanic `boat`: 0.97 alone vs 0.78 for everything else) from
-# legitimately strong features (iris `petal width`: 0.95 alone vs 0.95 for the rest).
+# perfectly AND leaves less than half the error that every other column combined
+# leaves. The second condition separates leaks (Titanic `boat`: 0.97 alone vs 0.76
+# for everything else) from legitimately strong features (iris `petal width`: 0.95
+# alone vs 0.95 for the rest). Error = 1 - score for both metrics.
 LEAK_SCORE = {"classification": 0.95, "regression": 0.95}
 LEAK_MISSING_ONLY = {"classification": 0.90, "regression": 0.80}
-LEAK_MARGIN = {"classification": 0.10, "regression": 0.20}
+LEAK_ERROR_RATIO = 0.5
 
 
 def _encode(s: pd.Series, kind: str) -> pd.DataFrame:
@@ -79,7 +80,14 @@ def feature_strength(df: pd.DataFrame, target: str, problem_type: str, profile: 
     for c in cols:
         kind = profile["columns"][c].get("kind", "categorical")
         X = _encode(df[c], kind)
-        scores = {"score": round(_cv_score(X, y, problem_type, seed), 4)}
+        score = _cv_score(X, y, problem_type, seed)
+        if problem_type == "regression" and kind == "numeric":
+            # A shallow tree can't fit a continuous copy of the target (8 leaves);
+            # squared rank correlation catches monotone re-encodings.
+            rho = pd.to_numeric(df[c], errors="coerce").corr(y, method="spearman")
+            if pd.notna(rho):
+                score = max(score, float(rho) ** 2)
+        scores = {"score": round(score, 4)}
         if X["missing"].mean() >= 0.05:
             scores["missing_only"] = round(_cv_score(X[["missing"]], y, problem_type, seed), 4)
         out[c] = scores
@@ -125,7 +133,8 @@ def compute_insights(df: pd.DataFrame, target: str, problem_type: str, profile: 
         if not (by_value or by_missing):
             continue
         rest = rest_score(df, target, problem_type, profile, exclude=c)
-        if max(s["score"], s.get("missing_only", -1)) - rest < LEAK_MARGIN[problem_type]:
+        alone = max(s["score"], s.get("missing_only", -1))
+        if (1 - alone) >= LEAK_ERROR_RATIO * (1 - rest):
             insights.append(f"{c!r} is very predictive ({metric}={s['score']:.2f}) but so are the other columns ({rest:.2f}); treated as real signal")
             continue
         leakage.append(c)

@@ -24,3 +24,6 @@ dist/
 .vscode/
 .idea/
 .DS_Store
+
+# Eval run outputs (baselines live in evals/ and are committed)
+evals/results/

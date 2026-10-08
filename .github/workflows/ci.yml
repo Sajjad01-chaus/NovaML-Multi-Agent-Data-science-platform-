@@ -16,3 +16,21 @@ jobs:
       - run: pip install -e ".[dev,serve,ui,groq,anthropic]"
       - run: ruff check src tests
       - run: pytest -m "not live" --cov=novaml --cov-report=term-missing
+
+  # Offline benchmark (deterministic policies, no API key): fails the build if a
+  # decision check that used to pass now fails, or a holdout score drops.
+  eval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - run: novaml eval --suite core --mode policy --out evals/results --gate evals/baseline_policy.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-report
+          path: evals/results/

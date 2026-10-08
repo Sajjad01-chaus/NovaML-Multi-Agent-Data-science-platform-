@@ -50,6 +50,13 @@ to verify. Verified suspects are force-dropped by the feature engineer regardles
 LLM's plan. This replaced Cramér's V, which rated a high-cardinality `ticket` column 0.92.
 On Titanic this changed the outcome from a leaked 0.97 balanced accuracy to an honest 0.78.
 
+### D2d. LLM feature drops need evidence
+Evals showed the LLM discarding real signal: both halves of an `f3 * f4` interaction, and
+correlated features labelled "redundant". An LLM-proposed drop is now accepted only for
+identifiers, constant or near-empty columns, verified leaks, or the planner's
+domain-knowledge leak suspects. Other drops are rejected with a warning. Models cope with
+weak or correlated features; discarded data cannot be recovered downstream.
+
 ### D3. LLM output is data, never code, in the serving path
 Feature engineering is a declarative `FeaturePlan` executed by a fixed sklearn
 transformer inside the pipeline. The generated FastAPI app is replaced by one fixed app

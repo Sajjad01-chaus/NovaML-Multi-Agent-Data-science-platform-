@@ -52,8 +52,13 @@ class ModelSpec:
     regressor: Callable[[int], Any]
     param_space: dict[str, Any] = field(default_factory=dict)
 
-    def build(self, problem_type: str, seed: int) -> Any:
-        return (self.classifier if problem_type == "classification" else self.regressor)(seed)
+    def build(self, problem_type: str, seed: int, class_weight: str | None = None) -> Any:
+        if problem_type != "classification":
+            return self.regressor(seed)
+        est = self.classifier(seed)
+        if class_weight and "class_weight" in est.get_params():
+            est.set_params(class_weight=class_weight)
+        return est
 
 
 # Factories, not instances: every run gets fresh estimators (the old module-level
@@ -168,7 +173,9 @@ def build_preprocessor() -> ColumnTransformer:
     )
 
 
-def build_pipeline(model_name: str, problem_type: str, feature_plan: dict | None, seed: int) -> Pipeline:
+def build_pipeline(
+    model_name: str, problem_type: str, feature_plan: dict | None, seed: int, class_weight: str | None = None
+) -> Pipeline:
     """Feature plan -> imputation/encoding -> estimator, all fitted per CV fold."""
     if model_name == BASELINE:
         est = (
@@ -177,7 +184,7 @@ def build_pipeline(model_name: str, problem_type: str, feature_plan: dict | None
             else DummyRegressor(strategy="mean")
         )
     else:
-        est = REGISTRY[model_name].build(problem_type, seed)
+        est = REGISTRY[model_name].build(problem_type, seed, class_weight)
     return Pipeline(
         [
             ("features", FeaturePlanTransformer(feature_plan)),
